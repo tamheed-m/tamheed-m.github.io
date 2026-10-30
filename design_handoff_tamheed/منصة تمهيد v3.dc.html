@@ -4026,7 +4026,7 @@ class Component extends DCLogic {
       user: u, savedUser: u,
       form: Object.assign({}, f, { password: '', confirm: '' }),
       authError: '', section: 'home'
-    });
+    }, () => setTimeout(() => this.cloudCheck(), 300));
   }
 
   exportData() {
@@ -5458,7 +5458,8 @@ class Component extends DCLogic {
 
   // عند فتح المنصة: هل في السحابة نسخة أحدث من جهاز آخر؟
   async cloudCheck() {
-    if (!this.cloudConnected()) return;
+    // لا فحص والمنصة مقفلة؛ يُفحص بعد إدخال كلمة المرور مباشرة
+    if (!this.cloudConnected() || !this.state.user) return;
     try {
       const at = await this.cloudReq('current/updatedAt');
       const c = this.cloudState();
