@@ -3898,6 +3898,14 @@ class Component extends DCLogic {
       this.setState(merged);
     }
     if (this.props.startSection) this.setState({ section: this.props.startSection });
+    try {
+      const r = JSON.parse(sessionStorage.getItem('tamheed.resume') || 'null');
+      sessionStorage.removeItem('tamheed.resume');
+      if (r && r.user && Date.now() - r.at < 60000 && (saved && saved.passHash)) {
+        this.setState({ user: r.user, savedUser: r.user, section: r.section || 'home', dataNotice: r.silent ? 'تم تحديث بياناتك من جهاز آخر.' : 'تم تحميل نسخة السحابة.' });
+        setTimeout(() => this.setState({ dataNotice: '' }), 5000);
+      }
+    } catch (e) {}
     const loadQ = m => {
       let recs = [];
       try { recs = JSON.parse(localStorage.getItem('tamheed.surveys.v1') || '[]'); } catch (e) {}
@@ -3918,6 +3926,10 @@ class Component extends DCLogic {
     this._onOnline = () => this.cloudSchedule();
     window.addEventListener('online', this._onOnline);
     setTimeout(() => this.cloudCheck(), 1200);
+    this._onVisible = () => this.cloudAutoCheck();
+    document.addEventListener('visibilitychange', this._onVisible);
+    window.addEventListener('focus', this._onVisible);
+    this._cloudTick = setInterval(() => this.cloudAutoCheck(), 120000);
     this._beforePrint = () => this.setPrintZoom(this.pageRef.current);
     window.addEventListener('beforeprint', this._beforePrint);
     setTimeout(this.measure, 60);
@@ -5327,6 +5339,8 @@ class Component extends DCLogic {
       const k = localStorage.key(i);
       if (k && k.indexOf('tamheed.') === 0 && k !== this.CLOUD_KEY) out[k] = localStorage.getItem(k);
     }
+    // القسم المفتوح والتكبير خاصان بكل جهاز؛ لا يُزامَنان حتى لا تتبادل الأجهزة الرفع بلا سبب
+    if (out['tamheed.v2']) { try { const v = JSON.parse(out['tamheed.v2']); delete v.section; delete v.zoom; out['tamheed.v2'] = JSON.stringify(v); } catch (e) {} }
     return out;
   }
 
@@ -5379,8 +5393,14 @@ class Component extends DCLogic {
   }
 
   // يكتب نسخة السحابة على هذا الجهاز ثم يعيد تحميل الصفحة
-  cloudApply(snap, payload, extra) {
+  cloudApply(snap, payload, extra, silent) {
     const keep = this.CLOUD_KEY;
+    let localUi = {};
+    try { const v = JSON.parse(localStorage.getItem('tamheed.v2') || '{}'); localUi = { section: v.section, zoom: v.zoom }; } catch (e) {}
+    snap = Object.assign({}, snap);
+    if (snap['tamheed.v2']) { try { const v = JSON.parse(snap['tamheed.v2']); if (localUi.section) v.section = localUi.section; if (localUi.zoom) v.zoom = localUi.zoom; snap['tamheed.v2'] = JSON.stringify(v); } catch (e) {} }
+    // المنصة المفتوحة تبقى مفتوحة بعد التحديث (في هذا التبويب فقط ولدقيقة واحدة)
+    if (this.state.user) { try { sessionStorage.setItem('tamheed.resume', JSON.stringify({ user: this.state.user, section: this.state.section, at: Date.now(), silent: !!silent })); } catch (e) {} }
     Object.keys(localStorage).filter(k => k.indexOf('tamheed.') === 0 && k !== keep).forEach(k => localStorage.removeItem(k));
     Object.keys(snap || {}).forEach(k => { if (k.indexOf('tamheed.') === 0 && k !== keep) { try { localStorage.setItem(k, snap[k]); } catch (e) {} } });
     const str = JSON.stringify(this.cloudSnapshot());
@@ -5419,15 +5439,15 @@ class Component extends DCLogic {
     }
   }
 
-  async cloudPull(daily) {
-    if (!this.cloudConnected()) return;
+  async cloudPull(daily, silent) {
+    if (!this.cloudConnected() || this._cloudBusy) return;
     this.cloudUi({ busy: true, error: '' });
     try {
       const key = await this.cloudKey();
       const payload = await this.cloudReq(daily ? 'daily/' + daily : 'current');
       if (!payload || !payload.data) { this.cloudUi({ busy: false, error: 'لا توجد بيانات في السحابة بعد.' }); return; }
       const snap = await this.cloudDecrypt(payload, key);
-      this.cloudApply(snap, payload);
+      this.cloudApply(snap, payload, null, silent);
     } catch (e) { this.cloudUi({ busy: false, error: this.cloudErr(e.message) }); }
   }
 
@@ -5444,9 +5464,21 @@ class Component extends DCLogic {
       const c = this.cloudState();
       if (at && at > c.lastRemote) {
         const dirty = this.cloudHash(JSON.stringify(this.cloudSnapshot())) !== c.lastHash;
+        // لا تعديلات محلية لم تُرفع ← تحميل صامت؛ وإلا يُسأل الموجّه أي النسختين تبقى
+        if (!dirty && c.lastHash && (await this.cloudKey())) { this.cloudPull(null, true); return; }
         this.cloudUi({ status: 'newer', remoteAt: at, dirty });
       } else this.cloudSchedule();
     } catch (e) { this.cloudUi({ status: 'error', error: this.cloudErr(e.message) }); }
+  }
+
+  // فحص عند العودة للتبويب أو للجهاز، وكل دقيقتين ما دامت المنصة ظاهرة
+  cloudAutoCheck() {
+    if (!this.cloudConnected() || this._cloudBusy || typeof document === 'undefined' || document.visibilityState === 'hidden') return;
+    const u = this.state.cloudUi || {};
+    if (u.status === 'newer' || u.status === 'conflict' || u.choice) return;
+    if (this._cloudLastCheck && Date.now() - this._cloudLastCheck < 15000) return;
+    this._cloudLastCheck = Date.now();
+    this.cloudCheck();
   }
 
   async cloudDisconnect() {
