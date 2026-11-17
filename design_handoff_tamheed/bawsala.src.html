@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#15445a">
+<title>بوصلة التخصص</title>
+<style>
+/*FONTS*/
+:root{--ink:#15445a;--teal:#0da9a6;--green:#05623c;--muted:#5c686d;--line:#e0e6e9;--bg:#f3f6f7;--card:#fff;--warn:#8a2325}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:#22333a;font-family:"Thmanyah Sans",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;-webkit-text-size-adjust:100%}
+body{min-height:100vh;padding:0 16px 40px}
+header{max-width:640px;margin:0 auto;padding:22px 0 14px;display:flex;flex-direction:column;gap:2px}
+header .k{font-size:12.5px;font-weight:700;color:var(--teal)}
+header h1{margin:0;font-size:26px;color:var(--ink)}
+header .s{font-size:13px;color:var(--muted)}
+main{max-width:640px;margin:0 auto}
+.card{background:var(--card);border-radius:20px;box-shadow:0 6px 20px rgba(0,56,69,.10);padding:20px;display:flex;flex-direction:column;gap:14px}
+h2{margin:0;font-size:19px;color:var(--ink);line-height:1.5}
+p{margin:0;font-size:14.5px;line-height:1.9}
+label{display:flex;flex-direction:column;gap:6px;font-size:13.5px;font-weight:700;color:var(--muted)}
+input,select{font:inherit;font-size:16px;font-weight:400;color:#22333a;background:#fff;border:1px solid #cfd8db;border-radius:12px;padding:12px 14px;width:100%}
+input:focus,select:focus{outline:2px solid var(--teal);outline-offset:1px}
+.btn{font:inherit;font-size:16px;font-weight:700;border:none;border-radius:99px;min-height:52px;padding:0 22px;cursor:pointer;background:var(--green);color:#fff;width:100%}
+.btn.sec{background:#fff;color:var(--ink);border:1px solid var(--ink)}
+.btn[disabled]{opacity:.6;cursor:wait}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+.err{color:var(--warn);font-size:14px;font-weight:700;line-height:1.8}
+.note{font-size:12.5px;color:var(--muted);line-height:1.9;background:#f3f8f9;border-radius:12px;padding:10px 12px}
+.bar{height:8px;border-radius:99px;background:#e3eaec;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--green);transition:width .3s}
+.meta{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);font-weight:700}
+.items{display:flex;flex-direction:column;gap:10px}
+.item{display:flex;gap:12px;align-items:flex-start;text-align:start;font:inherit;font-size:15.5px;line-height:1.75;color:#22333a;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:13px 14px;cursor:pointer;width:100%}
+.item .b{flex:0 0 auto;width:26px;height:26px;border-radius:8px;border:2px solid #9aa6ab;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;margin-top:1px}
+.item[aria-pressed="true"]{border-color:var(--green);background:#f2f8f4}
+.item[aria-pressed="true"] .b{background:var(--green);border-color:var(--green)}
+.hint{font-size:13px;color:var(--muted);line-height:1.8}
+.res{border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.res b{color:var(--ink);font-size:15px}
+.tag{display:inline-block;background:#e9f6f7;color:var(--ink);border-radius:99px;padding:3px 12px;font-size:13.5px;font-weight:700;margin:2px 0 2px 6px}
+.ok{font-size:44px;text-align:center}
+footer{max-width:640px;margin:18px auto 0;font-size:11.5px;color:#8a979c;text-align:center;line-height:1.8}
+</style>
+</head>
+<body>
+<header>
+  <span class="k" id="school">منصة تمهيد</span>
+  <h1>بوصلة التخصص</h1>
+  <span class="s">اكتشف ميولك ومهاراتك قبل اختيار تخصصك</span>
+</header>
+<main id="app"></main>
+<footer>إجاباتك تُشفَّر قبل إرسالها، ولا يقرؤها إلا الموجّه الطلابي في مدرستك.</footer>
+<script>
+/*QUESTIONNAIRES*/
+</script>
+<script>
+(function () {
+  'use strict';
+  var T = window.TAMHEED_Q, Q = T.QUESTIONNAIRES;
+  var app = document.getElementById('app');
+  var GRADES = ['أول ثانوي', 'ثاني ثانوي', 'ثالث ثانوي'];
+
+  function b64u(bytes) { var s = ''; bytes = new Uint8Array(bytes); for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function unb64u(str) { str = String(str).replace(/-/g, '+').replace(/_/g, '/'); while (str.length % 4) str += '='; var s = atob(str), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  // ---- إعدادات الموجّه من الرابط (#c=...) ----
+  var cfg = null;
+  try {
+    var m = location.hash.match(/[#&]c=([A-Za-z0-9_\-]+)/);
+    if (m) cfg = JSON.parse(new TextDecoder().decode(unb64u(m[1])));
+    if (cfg && !(cfg.k && cfg.d && cfg.o && cfg.p)) cfg = null;
+  } catch (e) { cfg = null; }
+  if (cfg && cfg.s) document.getElementById('school').textContent = cfg.s;
+
+  var KEY = 'bawsala.v1.' + (cfg ? cfg.o : 'x');
+  var st = { step: 'code', code: '', name: '', grade: '', sec: '', q: 0, c: 0, answers: {}, err: '', busy: false };
+  function load() { try { var s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.step) st = Object.assign(st, s, { err: '', busy: false }); } catch (e) {} }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ step: st.step, code: st.code, name: st.name, grade: st.grade, sec: st.sec, q: st.q, c: st.c, answers: st.answers, pending: st.pending || null, result: st.result || null })); } catch (e) {} }
+  function clearAll() { try { localStorage.removeItem(KEY); } catch (e) {} }
+
+  function url(path) { return cfg.d.replace(/\/+$/, '') + '/' + path + '.json'; }
+
+  // ---- التشفير: مفتاح مؤقت (ECDH P-256) مع المفتاح العام للموجّه ← AES-GCM ----
+  function encrypt(obj) {
+    var pub, eph;
+    return crypto.subtle.importKey('raw', unb64u(cfg.p), { name: 'ECDH', namedCurve: 'P-256' }, false, [])
+      .then(function (k) { pub = k; return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']); })
+      .then(function (kp) { eph = kp; return crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, kp.privateKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt']); })
+      .then(function (aes) {
+        var iv = crypto.getRandomValues(new Uint8Array(12));
+        return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, aes, new TextEncoder().encode(JSON.stringify(obj)))
+          .then(function (ct) { return crypto.subtle.exportKey('raw', eph.publicKey).then(function (raw) { return { v: 1, at: Date.now(), epk: b64u(raw), iv: b64u(iv), data: b64u(ct) }; }); });
+      });
+  }
+
+  function totalItems() { return Q.reduce(function (n, q) { return n + q.categories.reduce(function (m, c) { return m + c.items.length; }, 0); }, 0); }
+  function doneScreens() { var n = 0; for (var i = 0; i < st.q; i++) n += Q[i].categories.length; return n + st.c; }
+  function allScreens() { return Q.reduce(function (n, q) { return n + q.categories.length; }, 0); }
+
+  function render() {
+    if (!cfg) { app.innerHTML = '<div class="card"><h2>الرابط غير مكتمل</h2><p>افتح الرابط كما أرسله لك الموجّه الطلابي كاملًا، أو اطلب منه الرابط الصحيح.</p></div>'; return; }
+    var h = '';
+    if (st.step === 'code') {
+      h = '<div class="card"><h2>أهلًا بك 👋</h2><p>ستجيب عن ثلاث استبانات قصيرة (نحو 10 دقائق): نضج قرارك المهني، وميولك المهنية، ومهاراتك. لا توجد إجابة صحيحة أو خاطئة؛ اختر ما ينطبق عليك فعلًا.</p>' +
+        '<label>رمز المدرسة<input id="code" autocomplete="off" autocapitalize="characters" dir="ltr" inputmode="text" value="' + esc(st.code) + '" placeholder="الرمز الذي أعطاك إياه الموجّه"></label>' +
+        (st.err ? '<div class="err" role="alert">' + esc(st.err) + '</div>' : '') +
+        '<button class="btn" id="go"' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'جارٍ التحقق…' : 'متابعة') + '</button></div>';
+    } else if (st.step === 'info') {
+      h = '<div class="card"><h2>بياناتك</h2>' +
+        '<label>الاسم الثلاثي<input id="name" autocomplete="name" value="' + esc(st.name) + '" placeholder="مثال: محمد أحمد علي"></label>' +
+        '<div class="row"><label>الصف<select id="grade"><option value="">اختر</option>' + GRADES.map(function (g) { return '<option' + (st.grade === g ? ' selected' : '') + '>' + g + '</option>'; }).join('') + '</select></label>' +
+        '<label>الفصل<input id="sec" inputmode="numeric" value="' + esc(st.sec) + '" placeholder="مثال: 2"></label></div>' +
+        (st.err ? '<div class="err" role="alert">' + esc(st.err) + '</div>' : '') +
+        '<button class="btn" id="go">ابدأ الاستبانات</button></div>';
+    } else if (st.step === 'quiz') {
+      var q = Q[st.q], c = q.categories[st.c];
+      var pct = Math.round(doneScreens() / allScreens() * 100);
+      h = '<div class="card"><div class="meta"><span>الاستبانة ' + (st.q + 1) + ' من ' + Q.length + '</span><span>' + pct + '%</span></div><div class="bar"><i style="width:' + pct + '%"></i></div>' +
+        '<h2>' + esc(q.title.replace(/^استبانة\s*/, '')) + ' — ' + esc(c.name) + '</h2><p class="hint">اضغط على كل عبارة تنطبق عليك. واترك ما لا ينطبق.</p><div class="items">' +
+        c.items.map(function (t, i) { var k = c.key + '-' + i, on = !!st.answers[q.id + ':' + k]; return '<button class="item" data-k="' + k + '" aria-pressed="' + on + '"><span class="b">' + (on ? '✓' : '') + '</span><span>' + esc(t) + '</span></button>'; }).join('') +
+        '</div><div class="row"><button class="btn sec" id="back">السابق</button><button class="btn" id="go">' + (st.q === Q.length - 1 && st.c === q.categories.length - 1 ? 'إرسال إجاباتي' : 'التالي') + '</button></div></div>';
+    } else if (st.step === 'send') {
+      h = '<div class="card"><h2>' + (st.busy ? 'جارٍ إرسال إجاباتك…' : 'لم تُرسل إجاباتك بعد') + '</h2>' +
+        (st.err ? '<div class="err" role="alert">' + esc(st.err) + '</div><p class="hint">إجاباتك محفوظة في جوالك، ولن تضيع. تأكد من الاتصال بالإنترنت ثم اضغط إعادة الإرسال.</p><button class="btn" id="retry">إعادة الإرسال</button>' : '<div class="bar"><i style="width:70%"></i></div>') + '</div>';
+    } else if (st.step === 'done') {
+      var r = st.result || [];
+      h = '<div class="card"><div class="ok">✅</div><h2 style="text-align:center">وصلت إجاباتك إلى الموجّه الطلابي</h2>' +
+        '<p style="text-align:center">شكرًا ' + esc((st.name || '').split(' ')[0]) + '. هذا ملخص مبسّط لنتائجك:</p>' +
+        r.map(function (x) { return '<div class="res"><b>' + esc(x.title) + '</b>' + (x.tags ? '<div>' + x.tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>' : '') + (x.text ? '<p>' + esc(x.text) + '</p>' : '') + '</div>'; }).join('') +
+        '<div class="note">هذه نتائج استرشادية غير مقنّنة، وليست حكمًا نهائيًا عليك أو على تخصصك. سيناقشها معك الموجّه الطلابي في جلسة لتختار عن وعي.</div>' +
+        '<button class="btn sec" id="new">إنهاء</button></div>';
+    }
+    app.innerHTML = h;
+    bind();
+  }
+
+  function bind() {
+    var go = document.getElementById('go');
+    if (st.step === 'code' && go) go.onclick = checkCode;
+    if (st.step === 'code') { var ci = document.getElementById('code'); ci.onkeydown = function (e) { if (e.key === 'Enter') checkCode(); }; }
+    if (st.step === 'info' && go) go.onclick = function () {
+      st.name = document.getElementById('name').value.replace(/\s+/g, ' ').trim();
+      st.grade = document.getElementById('grade').value;
+      st.sec = document.getElementById('sec').value.replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x660); }).trim();
+      if (st.name.split(' ').length < 3) { st.err = 'اكتب اسمك الثلاثي.'; return render(); }
+      if (!st.grade) { st.err = 'اختر صفك.'; return render(); }
+      if (!st.sec) { st.err = 'اكتب رقم فصلك.'; return render(); }
+      st.err = ''; st.step = 'quiz'; st.q = 0; st.c = 0; save(); render(); window.scrollTo(0, 0);
+    };
+    if (st.step === 'quiz') {
+      Array.prototype.forEach.call(document.querySelectorAll('.item'), function (b) {
+        b.onclick = function () {
+          var k = Q[st.q].id + ':' + b.getAttribute('data-k');
+          if (st.answers[k]) delete st.answers[k]; else st.answers[k] = true;
+          var on = !!st.answers[k]; b.setAttribute('aria-pressed', on); b.querySelector('.b').textContent = on ? '✓' : '';
+          save();
+        };
+      });
+      document.getElementById('back').onclick = function () {
+        if (st.c > 0) st.c--; else if (st.q > 0) { st.q--; st.c = Q[st.q].categories.length - 1; } else { st.step = 'info'; }
+        save(); render(); window.scrollTo(0, 0);
+      };
+      go.onclick = function () {
+        if (st.c < Q[st.q].categories.length - 1) st.c++;
+        else if (st.q < Q.length - 1) { st.q++; st.c = 0; }
+        else return submit();
+        save(); render(); window.scrollTo(0, 0);
+      };
+    }
+    var rt = document.getElementById('retry'); if (rt) rt.onclick = function () { send(); };
+    var nw = document.getElementById('new'); if (nw) nw.onclick = function () { clearAll(); st = { step: 'code', code: '', name: '', grade: '', sec: '', q: 0, c: 0, answers: {}, err: '', busy: false }; render(); };
+  }
+
+  function checkCode() {
+    var code = document.getElementById('code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    st.code = code;
+    if (code.length < 4) { st.err = 'اكتب رمز المدرسة كما أعطاك إياه الموجّه.'; return render(); }
+    st.busy = true; st.err = ''; render();
+    fetch(url('codes/' + cfg.o + '/' + code)).then(function (r) { return r.json(); }).then(function (v) {
+      st.busy = false;
+      if (v === true) { st.step = 'info'; save(); } else st.err = 'الرمز غير صحيح. تأكد منه من الموجّه الطلابي.';
+      render();
+    }).catch(function () { st.busy = false; st.err = 'تعذّر الاتصال بالإنترنت. تأكد من الاتصال ثم أعد المحاولة.'; render(); });
+  }
+
+  function answersFor(q) { var a = {}; Object.keys(st.answers).forEach(function (k) { var p = k.split(':'); if (p[0] === q.id) a[p[1]] = true; }); return a; }
+
+  function summary() {
+    return Q.map(function (q) {
+      var sc = T.computeScores(q, answersFor(q)), res = T.summarize(q, sc), it = T.interpret(q, sc, res) || [];
+      var text = (it.filter(function (x) { return x.studentText; })[0] || {}).studentText || (res.band && res.band.studentText) || '';
+      var tags = null;
+      if (res.type === 'topN' && res.code) tags = res.code.split('').map(function (k) { var c = T.catByKey(q, k); return c ? c.name : k; });
+      else if (res.band) tags = [res.band.label];
+      return { title: q.title.replace(/^استبانة\s*/, ''), tags: tags, text: text };
+    });
+  }
+
+  function submit() {
+    st.result = summary();
+    var body = { name: st.name, grade: st.grade, sec: st.sec, code: st.code, answers: {} };
+    Q.forEach(function (q) { body.answers[q.id] = answersFor(q); });
+    st.step = 'send'; st.busy = true; st.err = ''; render();
+    encrypt(body).then(function (payload) { st.pending = payload; save(); send(); })
+      .catch(function () { st.busy = false; st.err = 'تعذّر تجهيز الإرسال في هذا المتصفح. جرّب متصفحًا آخر (Chrome أو Safari).'; render(); });
+  }
+
+  function send() {
+    if (!st.pending) return;
+    st.busy = true; st.err = ''; render();
+    fetch(url('surveys/' + cfg.o + '/' + st.code), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(st.pending) })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'denied' : 'http'); return r.json(); })
+      .then(function () {
+        var keep = { name: st.name, result: st.result };
+        clearAll();
+        st = { step: 'done', name: keep.name, result: keep.result, answers: {}, err: '', busy: false };
+        render(); window.scrollTo(0, 0);
+      })
+      .catch(function (e) {
+        st.busy = false;
+        st.err = e && e.message === 'denied' ? 'رفض الخادم الإرسال؛ ربما تغيّر رمز المدرسة. اطلب الرمز الجديد من الموجّه.' : 'تعذّر الإرسال: لا يوجد اتصال بالإنترنت.';
+        render();
+      });
+  }
+
+  load();
+  if (st.step === 'send' && st.pending) { render(); send(); } else render();
+  window.addEventListener('online', function () { if (st.step === 'send' && st.pending && !st.busy) send(); });
+})();
+</script>
+</body>
+</html>
