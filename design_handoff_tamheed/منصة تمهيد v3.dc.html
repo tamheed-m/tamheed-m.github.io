@@ -19,6 +19,7 @@
 <script src="_ds/moe-design-system-ddd98866-727b-4854-b938-95c134b2fa59/_ds_bundle.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.3/dist/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="questionnaires.global.js"></script>
 <script src="plan-followup.global.js"></script>
 <script src="asset-map-v2.js"></script>
@@ -2599,6 +2600,7 @@ input:focus,select:focus,textarea:focus{border-color:#69cee3;box-shadow:0 0 0 3p
 
       <sc-if value="{{ isSurvey }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;flex-direction:column;gap:16px;max-width:920px">
+          {{ bawsalaPanel }}
           <div style="background:#fff;box-shadow:0 6px 20px rgba(0,56,69,.10);border-radius:20px;padding:18px">
             <sc-if value="{{ surveyLocked }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
@@ -3935,7 +3937,8 @@ class Component extends DCLogic {
     setTimeout(this.measure, 60);
   }
   componentWillUnmount() { window.removeEventListener('resize', this.measure); window.removeEventListener('beforeprint', this._beforePrint); }
-  componentDidUpdate() {
+  componentDidUpdate(prevProps, prevState) {
+    if (prevState && prevState.section !== this.state.section && this.state.section === 'survey' && this.bawsalaState().code) this.bawsalaFetch(true);
     this.measure();
     const s = this.state;
     this.safeSave('tamheed.v2', {
@@ -5226,7 +5229,7 @@ class Component extends DCLogic {
   // لا يغادر الجهازَ إلا ملفٌ مشفّر بمفتاح مشتق من كلمة مرور الحساب؛ لا تراه Google ولا غيرها.
   CLOUD_KEY = 'tamheed.cloud.v1';
 
-  CLOUD_RULES = '{\n  "rules": {\n    "users": {\n      "$uid": {\n        ".read": "auth != null && auth.uid === $uid",\n        ".write": "auth != null && auth.uid === $uid"\n      }\n    }\n  }\n}';
+  CLOUD_RULES = "{\n  \"rules\": {\n    \"users\": {\n      \"$uid\": {\n        \".read\": \"auth != null && auth.uid === $uid\",\n        \".write\": \"auth != null && auth.uid === $uid\"\n      }\n    },\n    \"codes\": {\n      \"$owner\": {\n        \".read\": \"auth != null && auth.uid === $owner\",\n        \".write\": \"auth != null && auth.uid === $owner\",\n        \"$code\": {\n          \".read\": true\n        }\n      }\n    },\n    \"surveys\": {\n      \"$owner\": {\n        \".read\": \"auth != null && auth.uid === $owner\",\n        \".write\": \"auth != null && auth.uid === $owner\",\n        \"$code\": {\n          \"$id\": {\n            \".write\": \"!data.exists() && root.child(\'codes\').child($owner).child($code).val() === true\",\n            \".validate\": \"newData.hasChildren([\'v\', \'at\', \'epk\', \'iv\', \'data\']) && newData.child(\'data\').isString() && newData.child(\'data\').val().length < 20000\"\n          }\n        }\n      }\n    }\n  }\n}";
 
   cloudState() {
     if (this._cloud) return this._cloud;
@@ -5633,6 +5636,222 @@ class Component extends DCLogic {
         (u.days || []).length ? R('div', { key: 'd', style: { display: 'flex', gap: 6, flexWrap: 'wrap' } }, u.days.map(d => R('button', { key: d, type: 'button', style: Object.assign(btn('#f6f9fa', ink, '#d5dadc'), { minHeight: 34, fontSize: 12 }),
           onClick: () => { if (window.confirm('استعادة نسخة يوم ' + this.dayHijri(d) + '؟ ستحلّ محل بيانات هذا الجهاز.')) this.cloudPull(d); } }, this.dayHijri(d)))) : null
       ]));
+  }
+
+  // ===== «بوصلة التخصص» برابط خارجي للطلاب: الطالب يجيب من جواله، والإجابات تصل مشفّرة إلى منصة الموجّه =====
+  // الرابط يحمل إعدادات السحابة والمفتاح العام فقط؛ المفتاح الخاص يبقى في بيانات الموجّه (ويُزامَن مشفّرًا بين أجهزته).
+  BAWSALA_KEY = 'tamheed.bawsala.v1';
+  BAWSALA_URL = 'https://tamheed-m.github.io/bawsala/';
+
+  bawsalaState() {
+    if (this._bw) return this._bw;
+    let r = null;
+    try { r = JSON.parse(localStorage.getItem(this.BAWSALA_KEY) || 'null'); } catch (e) {}
+    this._bw = Object.assign({ priv: null, pub: '', code: '', lastFetch: 0, count: 0 }, r || {});
+    return this._bw;
+  }
+
+  setBawsala(patch) {
+    this._bw = Object.assign({}, this.bawsalaState(), patch);
+    this.safeSave(this.BAWSALA_KEY, this._bw);
+    this.setState({ bwTick: (this.state.bwTick || 0) + 1 });
+  }
+
+  bwUi(patch) { this.setState(st => ({ bwUi: Object.assign({}, st.bwUi || {}, patch) })); }
+
+  b64u(buf) { return this.b64(buf).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  unb64u(str) { let s = String(str).replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return this.unb64(s); }
+
+  // طلب إلى قاعدة البيانات خارج مجلد المستخدم (codes/ و surveys/)
+  async cloudRoot(path, method, body) {
+    const c = this.cloudState(), token = await this.cloudToken();
+    const r = await fetch(c.dbUrl + '/' + path + '.json?auth=' + encodeURIComponent(token), {
+      method: method || 'GET', headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined, body: body !== undefined ? JSON.stringify(body) : undefined });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error((j && j.error) || ('HTTP ' + r.status));
+    return j;
+  }
+
+  async bawsalaEnsureKeys() {
+    const b = this.bawsalaState();
+    if (b.priv && b.pub) return;
+    const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey']);
+    const priv = await crypto.subtle.exportKey('jwk', kp.privateKey);
+    const pub = this.b64u(await crypto.subtle.exportKey('raw', kp.publicKey));
+    this.setBawsala({ priv, pub });
+  }
+
+  bawsalaSuggest() {
+    const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ', d = crypto.getRandomValues(new Uint8Array(6));
+    return Array.from(d.slice(0, 3)).map(x => abc[x % abc.length]).join('') + Array.from(d.slice(3)).map(x => x % 10).join('');
+  }
+
+  async bawsalaSetCode(raw) {
+    const code = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length < 4 || code.length > 12) { this.bwUi({ msg: 'الرمز من 4 إلى 12 حرفًا أو رقمًا إنجليزيًا، مثل IMAM48.' }); return; }
+    this.bwUi({ busy: true, msg: '' });
+    try {
+      await this.bawsalaEnsureKeys();
+      const c = this.cloudState(), old = this.bawsalaState().code;
+      await this.cloudRoot('codes/' + c.uid + '/' + code, 'PUT', true);
+      if (old && old !== code) await this.cloudRoot('codes/' + c.uid + '/' + old, 'DELETE');
+      this.setBawsala({ code });
+      this.bwUi({ busy: false, editCode: false, codeInput: '', msg: '' });
+    } catch (e) { this.bwUi({ busy: false, msg: this.cloudErr(e.message) }); }
+  }
+
+  bawsalaLink() {
+    const c = this.cloudState(), b = this.bawsalaState();
+    if (!c.uid || !b.pub) return '';
+    const school = String((this.state.exam && this.state.exam.school) || '').trim();
+    const cfg = { k: c.apiKey, d: c.dbUrl, o: c.uid, p: b.pub, s: school };
+    return this.BAWSALA_URL + '#c=' + this.b64u(new TextEncoder().encode(JSON.stringify(cfg)));
+  }
+
+  bawsalaMessage() {
+    const school = String((this.state.exam && this.state.exam.school) || '').trim();
+    return 'عزيزي الطالب' + (school ? ' في ' + school : '') + '،\nأجب عن استبانات «بوصلة التخصص» (نحو 10 دقائق) لتتعرف على ميولك ومهاراتك قبل اختيار تخصصك:\n' +
+      this.bawsalaLink() + '\nرمز المدرسة: ' + this.bawsalaState().code + '\nإجاباتك سرية ولا يطّلع عليها إلا الموجّه الطلابي.';
+  }
+
+  async bawsalaDecrypt(payload, privKey) {
+    const epk = await crypto.subtle.importKey('raw', this.unb64u(payload.epk), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+    const aes = await crypto.subtle.deriveKey({ name: 'ECDH', public: epk }, privKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: this.unb64u(payload.iv) }, aes, this.unb64u(payload.data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  // يجلب ردود الطلاب ويحوّل كل رد إلى ثلاثة سجلات بالبنية نفسها التي تحفظها المنصة
+  async bawsalaFetch(quiet) {
+    const b = this.bawsalaState(), m = this.state.qDefs;
+    if (!this.cloudConnected() || !b.priv || !m || this._bwBusy) return;
+    this._bwBusy = true;
+    if (!quiet) this.bwUi({ fetching: true, msg: '' });
+    try {
+      const c = this.cloudState();
+      const all = (await this.cloudRoot('surveys/' + c.uid)) || {};
+      const priv = await crypto.subtle.importKey('jwk', b.priv, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+      const incoming = [];
+      let bad = 0;
+      for (const code of Object.keys(all)) {
+        for (const id of Object.keys(all[code] || {})) {
+          try {
+            const d = await this.bawsalaDecrypt(all[code][id], priv);
+            const at = all[code][id].at || Date.now();
+            const className = [d.grade, d.sec ? 'فصل ' + d.sec : ''].filter(Boolean).join(' — ');
+            m.QUESTIONNAIRES.forEach(def => {
+              const answers = (d.answers && d.answers[def.id]) || {};
+              const scores = m.computeScores(def, answers), result = m.summarize(def, scores);
+              incoming.push({ id: 'bw-' + id + '-' + def.id, src: 'bawsala', at, questionnaireId: def.id, name: String(d.name || '').trim(), className,
+                date: this.hijri(new Date(at)), scores, result, notes: m.interpret(def, scores, result) });
+            });
+          } catch (e) { bad++; }
+        }
+      }
+      // الأحدث لكل طالب ولكل استبانة؛ لا يُمسّ ما أدخله الموجّه يدويًا
+      const cur = this.state.surveyRecords || [];
+      const manual = cur.filter(r => r.src !== 'bawsala');
+      const best = {};
+      cur.filter(r => r.src === 'bawsala').concat(incoming).forEach(r => {
+        const k = this.normName(r.name) + '|' + r.className + '|' + r.questionnaireId;
+        if (!best[k] || (r.at || 0) > (best[k].at || 0)) best[k] = r;
+      });
+      const bw = Object.values(best).sort((a, z) => (z.at || 0) - (a.at || 0));
+      const before = cur.filter(r => r.src === 'bawsala').map(r => r.id).sort().join(',');
+      if (bw.map(r => r.id).sort().join(',') !== before) this.persistSurveys(bw.concat(manual));
+      const students = new Set(bw.map(r => this.normName(r.name) + '|' + r.className)).size;
+      this.setBawsala({ lastFetch: Date.now(), count: students });
+      this.bwUi({ fetching: false, msg: bad ? 'تعذّر فتح ' + bad + ' ردًّا (ربما أُرسلت بمفتاح قديم).' : '' });
+    } catch (e) {
+      this.bwUi({ fetching: false, msg: quiet ? '' : this.cloudErr(e.message) });
+    } finally { this._bwBusy = false; }
+  }
+
+  async bawsalaClearCloud() {
+    if (!window.confirm('حذف ردود الطلاب من السحابة؟ تبقى النتائج التي جُلبت محفوظة في منصتك. اجلب الردود أولًا حتى لا يضيع شيء.')) return;
+    this.bwUi({ busy: true });
+    try { await this.bawsalaFetch(true); await this.cloudRoot('surveys/' + this.cloudState().uid, 'DELETE'); this.bwUi({ busy: false, msg: 'حُذفت الردود من السحابة.' }); }
+    catch (e) { this.bwUi({ busy: false, msg: this.cloudErr(e.message) }); }
+  }
+
+  bawsalaExcel() {
+    const m = this.state.qDefs, recs = (this.state.surveyRecords || []);
+    if (!m || !window.XLSX) return;
+    const byStudent = {};
+    recs.forEach(r => { const k = this.normName(r.name) + '|' + r.className; (byStudent[k] = byStudent[k] || { name: r.name, className: r.className, date: r.date, src: r.src })[r.questionnaireId] = r; });
+    const head = ['اسم الطالب', 'الصف والفصل', 'التاريخ', 'المصدر'];
+    m.QUESTIONNAIRES.forEach(def => {
+      head.push(def.title.replace(/^استبانة\s*/, '') + ' — النتيجة');
+      def.categories.forEach(c => head.push(c.name));
+    });
+    const rows = Object.values(byStudent).sort((a, b) => (a.className + a.name).localeCompare(b.className + b.name, 'ar')).map(s => {
+      const row = [s.name, s.className, s.date, s.src === 'bawsala' ? 'الرابط الخارجي' : 'إدخال الموجّه'];
+      m.QUESTIONNAIRES.forEach(def => {
+        const r = s[def.id];
+        const res = r && r.result;
+        row.push(!r ? '' : res.type === 'topN' ? (res.code || '').split('').map(k => (m.catByKey(def, k) || {}).name || k).join('، ') : (res.band ? res.band.label + ' (' + res.total + ')' : ''));
+        def.categories.forEach(c => row.push(r ? (r.scores[c.key] || 0) + ' / ' + c.items.length : ''));
+      });
+      return row;
+    });
+    const ws = window.XLSX.utils.aoa_to_sheet([head].concat(rows));
+    ws['!cols'] = head.map((_, i) => ({ wch: i === 0 ? 30 : i < 4 ? 16 : 14 }));
+    const wb = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, ws, 'بوصلة التخصص');
+    const blob = new Blob([window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = 'نتائج بوصلة التخصص.xlsx'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  bawsalaPanel() {
+    const R = React.createElement, ink = '#15445a', b = this.bawsalaState(), u = this.state.bwUi || {};
+    const btn = (bg, fg, bd) => ({ background: bg, color: fg, border: bd ? '1px solid ' + bd : 'none', borderRadius: 99, minHeight: 40, padding: '0 16px', fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' });
+    const input = { background: '#fff', border: '1px solid #d5d5d5', borderRadius: 12, padding: '9px 12px', fontSize: 14, fontFamily: 'inherit', color: '#22333a', boxSizing: 'border-box' };
+    const wrap = kids => R('div', { 'data-bawsala': '1', style: { background: '#fff', boxShadow: '0 6px 20px rgba(0,56,69,.10)', borderRadius: 20, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 } }, kids);
+    const head = R('div', { key: 'h', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+      R('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
+        R('b', { style: { fontSize: 15.5, color: ink } }, '🔗 رابط خارجي للطلاب'),
+        R('span', { style: { fontSize: 12.5, color: '#5c686d', lineHeight: 1.8 } }, 'يجيب الطالب من جواله، وتصلك نتيجته هنا مشفّرة.' + (b.code && b.count ? ' وصلت نتائج ' + b.count + ' طالبًا.' : ''))),
+      R('button', { type: 'button', 'data-bw-toggle': '1', style: btn(u.open ? '#fff' : ink, u.open ? ink : '#fff', u.open ? ink : ''), onClick: () => this.bwUi({ open: !u.open }) }, u.open ? 'إخفاء' : (b.code ? 'عرض الرابط والنتائج' : 'إعداد الرابط')));
+    if (!u.open) return wrap([head]);
+    if (!this.cloudConnected()) return wrap([head, R('div', { key: 'nc', style: { background: '#fff8e6', border: '1px solid #ecd9a3', borderRadius: 12, padding: '10px 14px', fontSize: 13, lineHeight: 1.9, color: '#6b5310' } },
+      'يحتاج الرابط الخارجي إلى ربط المنصة بالسحابة أولًا، لأن إجابات الطلاب تصل عبرها. ',
+      R('button', { type: 'button', style: Object.assign(btn('#15445a', '#fff'), { marginTop: 6 }), onClick: () => this.setState({ section: 'cloud' }) }, 'فتح «الحفظ في السحابة»'))]);
+    const parts = [head];
+    if (!b.code || u.editCode) {
+      const val = u.codeInput != null ? u.codeInput : (b.code || this._bwSuggest || (this._bwSuggest = this.bawsalaSuggest()));
+      parts.push(R('div', { key: 'code', style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+        R('span', { style: { fontSize: 13, color: '#3d4a50', lineHeight: 1.9 } }, 'اختر رمزًا للمدرسة يكتبه الطلاب قبل البدء؛ فلا يستطيع من وصله الرابط دون الرمز أن يرسل. تستطيع تغييره متى شئت.'),
+        R('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+          R('input', { value: val, dir: 'ltr', 'data-bw-code': '1', onChange: e => this.bwUi({ codeInput: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }), style: Object.assign({}, input, { width: 170, letterSpacing: 2, fontWeight: 700 }) }),
+          R('button', { type: 'button', 'data-bw-save': '1', disabled: !!u.busy, style: btn('#05623c', '#fff'), onClick: () => this.bawsalaSetCode(val) }, u.busy ? 'جارٍ الحفظ…' : 'حفظ الرمز وإنشاء الرابط'),
+          b.code ? R('button', { type: 'button', style: btn('#fff', '#5c686d', '#d5d5d5'), onClick: () => this.bwUi({ editCode: false, codeInput: null }) }, 'إلغاء') : null)));
+    } else {
+      const link = this.bawsalaLink();
+      let qr = '';
+      try { if (window.qrcode) { const q = window.qrcode(0, 'M'); q.addData(link); q.make(); qr = q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }); } } catch (e) {}
+      const copy = (text, tag) => { try { navigator.clipboard.writeText(text); } catch (e) {} this.bwUi({ copied: tag }); setTimeout(() => this.bwUi({ copied: '' }), 2200); };
+      parts.push(R('div', { key: 'link', style: { display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' } },
+        qr ? R('div', { 'data-bw-qr': '1', style: { width: 168, height: 168, flex: '0 0 auto', background: '#fff', border: '1px solid #e0e6e9', borderRadius: 12, padding: 4 }, dangerouslySetInnerHTML: { __html: qr } }) : null,
+        R('div', { style: { flex: '1 1 260px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 } },
+          R('span', { style: { fontSize: 13, color: '#5c686d' } }, 'رمز المدرسة'),
+          R('b', { 'data-bw-current': b.code, dir: 'ltr', style: { fontSize: 24, letterSpacing: 3, color: ink, textAlign: 'right' } }, b.code),
+          R('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+            R('button', { type: 'button', 'data-bw-copymsg': '1', style: btn('#05623c', '#fff'), onClick: () => copy(this.bawsalaMessage(), 'msg') }, u.copied === 'msg' ? 'تم النسخ ✓' : 'نسخ رسالة للطلاب (واتساب)'),
+            R('button', { type: 'button', style: btn('#fff', ink, ink), onClick: () => copy(link, 'link') }, u.copied === 'link' ? 'تم النسخ ✓' : 'نسخ الرابط فقط'),
+            R('button', { type: 'button', style: btn('#fff', '#5c686d', '#d5d5d5'), onClick: () => this.bwUi({ editCode: true, codeInput: '' }) }, 'تغيير الرمز')),
+          R('input', { readOnly: true, value: link, dir: 'ltr', 'data-bw-link': '1', 'aria-label': 'رابط الطلاب', onFocus: e => e.target.select(), style: Object.assign({}, input, { width: '100%', fontSize: 11.5, color: '#5c686d' }) }),
+          R('span', { style: { fontSize: 12, color: '#7a868b', lineHeight: 1.8 } }, 'اعرض رمز QR على الشاشة في الفصل ليمسحه الطلاب بالجوال، أو أرسل الرسالة في مجموعة الصف. عند تغيير الرمز يتوقف القديم فورًا.'))));
+      parts.push(R('div', { key: 'res', style: { borderTop: '1px solid #e8eaeb', paddingTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+        R('span', { 'data-bw-count': b.count || 0, style: { flex: '1 1 220px', fontSize: 13, color: '#3d4a50', lineHeight: 1.8 } },
+          (b.count ? 'نتائج ' + b.count + ' طالبًا في سجل الاستبانات أدناه' : 'لم تصل ردود بعد') + (b.lastFetch ? ' — آخر تحديث ' + this.cloudAgo(b.lastFetch) : '')),
+        R('button', { type: 'button', 'data-bw-fetch': '1', disabled: !!u.fetching, style: btn('#15445a', '#fff'), onClick: () => this.bawsalaFetch(false) }, u.fetching ? 'جارٍ الجلب…' : 'تحديث النتائج'),
+        R('button', { type: 'button', 'data-bw-excel': '1', style: btn('#fff', '#05623c', '#05623c'), onClick: () => this.bawsalaExcel() }, 'تصدير Excel'),
+        R('button', { type: 'button', style: btn('#fff', '#8a2325', '#ecc5c5'), onClick: () => this.bawsalaClearCloud() }, 'حذف الردود من السحابة')));
+    }
+    if (u.msg) parts.push(R('div', { key: 'm', role: 'alert', style: { color: '#8a2325', fontSize: 13, fontWeight: 700, lineHeight: 1.8 } }, u.msg));
+    return wrap(parts);
   }
 
   // ===== إضافات سَنَد: مواعيد المتابعة، وفرص التعويض، وتوصيات اللجنة، والتقرير الفصلي =====
@@ -8634,6 +8853,7 @@ class Component extends DCLogic {
       isBank: s.section === 'bank',
       isAbout: s.section === 'about',
       isSurvey: s.section === 'survey',
+      bawsalaPanel: s.section === 'survey' ? this.bawsalaPanel() : null,
       ...this.surveyVals(),
       isFollow: s.section === 'followup',
       ...this.followVals(),

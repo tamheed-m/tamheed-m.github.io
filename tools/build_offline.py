@@ -1,11 +1,11 @@
 """Build a single self-contained, offline index.html from the Tamheed v3 design component.
 
-usage: build_offline.py <handoff_dir> <html2pdf.bundle.min.js> <react.production.min.js> <react-dom.production.min.js> <out.html> <xlsx.full.min.js>
-(html2pdf.js@0.10.3, react@18.3.1, react-dom@18.3.1, xlsx@0.18.5 — e.g. from `npm pack`)
+usage: build_offline.py <handoff_dir> <html2pdf.bundle.min.js> <react.production.min.js> <react-dom.production.min.js> <out.html> <xlsx.full.min.js> <qrcode.js>
+(html2pdf.js@0.10.3, react@18.3.1, react-dom@18.3.1, xlsx@0.18.5, qrcode-generator@1.4.4 — e.g. from `npm pack`)
 """
 import base64, json, re, sys, pathlib
 
-src_dir, html2pdf, react, react_dom, out, xlsx = map(pathlib.Path, sys.argv[1:7])
+src_dir, html2pdf, react, react_dom, out, xlsx, qrcode = map(pathlib.Path, sys.argv[1:8])
 
 DS = src_dir / "_ds/moe-design-system-ddd98866-727b-4854-b938-95c134b2fa59"
 v3 = next(src_dir.glob("*v3.dc.html"))
@@ -65,12 +65,13 @@ for tag in [
     f'<script src="{ds_dir}/_ds_bundle.js"></script>\n',
     '<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.3/dist/html2pdf.bundle.min.js"></script>\n',
     '<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>\n',
+    '<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>\n',
     '<script src="questionnaires.global.js"></script>\n',
     '<script src="plan-followup.global.js"></script>\n',
     '<script src="asset-map-v2.js"></script>\n',
 ]:
     html = remove_once(html, tag)
-head_scripts = [react, react_dom, DS / "_ds_bundle.js", html2pdf, xlsx,
+head_scripts = [react, react_dom, DS / "_ds_bundle.js", html2pdf, xlsx, qrcode,
                 src_dir / "questionnaires.global.js", src_dir / "plan-followup.global.js",
                 src_dir / "asset-map-v2.js"]
 
