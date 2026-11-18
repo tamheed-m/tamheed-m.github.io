@@ -384,6 +384,7 @@ window.TAMHEED_Q = { QUESTIONNAIRES: QUESTIONNAIRES, catByKey: catByKey, maxTota
 })();
 
 </script>
+<script src="plus.js"></script>
 <script>
 (function () {
   'use strict';
@@ -403,6 +404,7 @@ window.TAMHEED_Q = { QUESTIONNAIRES: QUESTIONNAIRES, catByKey: catByKey, maxTota
     if (cfg && !(cfg.k && cfg.d && cfg.o && cfg.p)) cfg = null;
   } catch (e) { cfg = null; }
   if (cfg && cfg.s) document.getElementById('school').textContent = cfg.s;
+  if (cfg && cfg.s && window.BawsalaPlus) window.BawsalaPlus.header(cfg.s);
 
   var KEY = 'bawsala.v1.' + (cfg ? cfg.o : 'x');
   var st = { step: 'code', code: '', name: '', grade: '', sec: '', q: 0, c: 0, answers: {}, err: '', busy: false };
@@ -460,7 +462,8 @@ window.TAMHEED_Q = { QUESTIONNAIRES: QUESTIONNAIRES, catByKey: catByKey, maxTota
         '<p style="text-align:center">شكرًا ' + esc((st.name || '').split(' ')[0]) + '. هذا ملخص مبسّط لنتائجك:</p>' +
         r.map(function (x) { return '<div class="res"><b>' + esc(x.title) + '</b>' + (x.tags ? '<div>' + x.tags.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>' : '') + (x.text ? '<p>' + esc(x.text) + '</p>' : '') + '</div>'; }).join('') +
         '<div class="note">هذه نتائج استرشادية غير مقنّنة، وليست حكمًا نهائيًا عليك أو على تخصصك. سيناقشها معك الموجّه الطلابي في جلسة لتختار عن وعي.</div>' +
-        '<button class="btn sec" id="new">إنهاء</button></div>';
+        '<button class="btn sec" id="new">إنهاء</button></div>' +
+        (window.BawsalaPlus ? window.BawsalaPlus.doneHtml(r) : '');
     }
     app.innerHTML = h;
     bind();
@@ -524,7 +527,7 @@ window.TAMHEED_Q = { QUESTIONNAIRES: QUESTIONNAIRES, catByKey: catByKey, maxTota
       var tags = null;
       if (res.type === 'topN' && res.code) tags = res.code.split('').map(function (k) { var c = T.catByKey(q, k); return c ? c.name : k; });
       else if (res.band) tags = [res.band.label];
-      return { title: q.title.replace(/^استبانة\s*/, ''), tags: tags, text: text };
+      return { title: q.title.replace(/^استبانة\s*/, ''), tags: tags, text: text, code: res.type === 'topN' ? (res.code || '') : '' };
     });
   }
 
