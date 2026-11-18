@@ -14247,7 +14247,7 @@ class Component extends DCLogic {
     const R = React.createElement, ink = '#15445a', b = this.bawsalaState(), u = this.state.bwUi || {};
     const btn = (bg, fg, bd) => ({ background: bg, color: fg, border: bd ? '1px solid ' + bd : 'none', borderRadius: 99, minHeight: 40, padding: '0 16px', fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' });
     const input = { background: '#fff', border: '1px solid #d5d5d5', borderRadius: 12, padding: '9px 12px', fontSize: 14, fontFamily: 'inherit', color: '#22333a', boxSizing: 'border-box' };
-    const wrap = kids => R('div', { 'data-bawsala': '1', style: { background: '#fff', boxShadow: '0 6px 20px rgba(0,56,69,.10)', borderRadius: 20, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 } }, kids);
+    const wrap = kids => R('div', { 'data-bawsala': '1', style: { background: '#fff', boxShadow: '0 6px 20px rgba(0,56,69,.10)', borderRadius: 20, padding: 18, display: 'flex', flexDirection: 'column', gap: 12 } }, kids.concat([R('a', { key: 'bp-guide', href: 'bawsala/guide.html', target: '_blank', rel: 'noopener', style: { alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, background: '#e7f5f4', color: '#0b6e6c', borderRadius: 99, minHeight: 38, padding: '0 14px', fontSize: 12.5, fontWeight: 700, textDecoration: 'none' } }, '🧭 دليل الموجّه: سوق العمل وحاسبة النسبة الموزونة ↗')]));
     const head = R('div', { key: 'h', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
       R('div', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
         R('b', { style: { fontSize: 15.5, color: ink } }, '🔗 رابط خارجي للطلاب'),
